@@ -7,6 +7,9 @@ import re
 from evernoteapi import EvernoteAPI
 from xml.dom import minidom
 
+import emailipy
+import base64
+import os
 
 class EvervimPref(object):
     """ This object has pref of vim """
@@ -74,9 +77,24 @@ class EvervimEditor(object):
         else:
             bufStrings.append('# ' + note.title)
             bufStrings.append("Tags:" + ",".join(note.tagNames))
-            content = markdownAndENML.parseENML(ennote).encode('utf-8')
-            bufStrings.extend(content.splitlines())
+#            content = markdownAndENML.parseENML(ennote).encode('utf-8')
+            try:
+                divs = doc.getElementsByTagName("div")
+                original_content = base64.b64decode(divs[-1].firstChild.nodeValue).split("\n")
+                bufStrings.extend(original_content)
+            except:
+                self.__appendRestoreErrorMessage(bufStrings)
+                contentxml = ennote.toprettyxml(indent=pref.xmlindent, encoding='utf-8')
+                contentxml = re.sub('^' + pref.xmlindent, '', contentxml, flags=re.MULTILINE)
+                bufStrings.extend([line for line in contentxml.splitlines()[1:-1] if line.strip()])
+
         return bufStrings
+
+    def __appendRestoreErrorMessage(self, bufStrings):
+        bufStrings.append('*****************************************************')
+        bufStrings.append('* THIS NOTE IS BROKEN OR IS NOT CREATED BY evervim. *')
+        bufStrings.append('* YOU MUST NOT EDIT THIS NOTE !!                    *')
+        bufStrings.append('*****************************************************')
 
     def buffer2note(self, note, buflines):
         """ return note that set title, tags, content from buftext """
@@ -89,6 +107,20 @@ class EvervimEditor(object):
             note.title = re.sub(r'^#', '',buflines[0]).strip()
             note = self.api.editTag(note, buflines[1].replace('Tags:', ''))
             parsedContent = markdownAndENML.parseMarkdown("\n".join(buflines[2:]))
+
+            contents = buflines[2:]
+            encoded_contents = base64.b64encode("\n".join(contents))
+            parsedContent = markdownAndENML.parseMarkdown("\n".join(contents))
+            parsedContent += ('\n<div style="display: none;">' + encoded_contents + '</div>')
+
+            with open(os.path.dirname(__file__) + '/../../css/default.css', "r") as f:
+                css = f.read()
+            parsedContent = emailipy.inline_css(parsedContent, css)
+
+            """ html tag and class attribute is not permitted in ENML """
+            parsedContent = re.sub('</?html[^>]*>', '', parsedContent)
+            parsedContent = re.sub('class="[^"]*"', '', parsedContent)
+
             note.content  = EvernoteAPI.NOTECONTENT_HEADER + parsedContent.encode('utf-8') + EvernoteAPI.NOTECONTENT_FOOTER
 
         return note

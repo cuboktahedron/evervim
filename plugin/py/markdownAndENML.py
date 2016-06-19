@@ -121,7 +121,7 @@ def parseENML(node, level=0, result='', option=parserOption()):  # {{{
 
 
 def parseMarkdown(mkdtext):  # {{{
-    m = markdown.markdown(mkdtext.decode('utf-8'))
+    m = markdown.markdown(mkdtext.decode('utf-8'), extensions=['gfm'])
     return m
 #}}}
 
